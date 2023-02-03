@@ -7,3 +7,6 @@ a pairs trading strategy that allows for a non-linear relationship and generates
 
 ## Team Member:
 Andrew Lazzeri (Captain), Jingyi Han, Aditi Narware, Yunlan Tang, Zhangyuan Xiong, Jiuyue Zhou 
+
+## Advisor:
+Kevin Coldiron, Linda Kreitzman
