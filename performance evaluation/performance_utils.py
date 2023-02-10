@@ -112,8 +112,9 @@ def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
                 grid=True, fig_path=None):
     """
     Input:
-        high_mark_cols, low_mark_cols: list
-        labels: list
+        high_mark_cols: list, indices/funds you want to add high annotation
+        low_mark_cols: list, indices/funds you want to add low annotation
+        labels: list, lables in legend
     """
     plt.plot(NAV_df)
     plt.xticks(rotation=30)
@@ -171,10 +172,10 @@ def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
     if labels:
         plt.legend(labels=labels)
     plt.grid(grid)
-    plt.show()
     if fig_path:
         plt.savefig(fig_path, bbox_inches="tight", dpi=480)
-
+    # plt.show()
+    
 
 def NAV_s_plot(NAV_s, high_mark=True, low_mark=True, grid=True, fig_path=None):
     NAV_s.plot.line()
