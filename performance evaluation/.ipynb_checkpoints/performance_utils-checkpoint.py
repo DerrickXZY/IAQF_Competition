@@ -8,7 +8,7 @@ def performance_for_series(rtn_s, rf=0.0):
     Output:
         NAV_s: pd.Series, Net Asset Value (NAV) Series
         Simple Return, Annualized Return, Annualized Volatility, Sharpe Ratio, 
-        Sortino Ratio, Maximum Drawdown, Calmar Ratio
+        Adjusted Sharpe Ratio, Sortino Ratio, Maximum Drawdown, Calmar Ratio
     """
     Rtn_s = rtn_s + 1
     NAV_s = Rtn_s.cumprod()
@@ -25,6 +25,12 @@ def performance_for_series(rtn_s, rf=0.0):
     
     # Sharpe Ratio
     sharpe = (annualized_rtn - rf) / annualized_vol
+
+    # Adjusted Sharpe Ratio
+    skewness = rtn_s.skew()
+    kurtosis = rtn_s.kurt()
+    adj_sharpe = sharpe * (1 + (skewness / 6) * sharpe 
+        - (kurtosis - 3) / 24 * (sharpe ** 2))
 
     # Sortino Ratio
     down_rtn_s = rtn_s[rtn_s < rf]
@@ -51,10 +57,11 @@ def performance_for_series(rtn_s, rf=0.0):
     calmar = annualized_rtn / max_drawdown
 
     result_s = pd.Series(
-        [rtn, annualized_rtn, annualized_vol, sharpe, sortino, max_drawdown, 
-        calmar],                
+        [rtn, annualized_rtn, annualized_vol, sharpe, adj_sharpe, sortino, 
+        max_drawdown, calmar],                
         index=["Simple Return", "Annualized Return", "Annualized Volatility", 
-        "Sharpe Ratio", "Sortino Ratio", "Maximum Drawdown", "Calmar Ratio"],
+        "Sharpe Ratio", "Adjusted Sharpe Ratio", "Sortino Ratio", 
+        "Maximum Drawdown", "Calmar Ratio"],
         name=rtn_s.name
     )
     return NAV_s, result_s
