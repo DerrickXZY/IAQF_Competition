@@ -1,3 +1,8 @@
+"""
+Prediction on cumulative return from t to t+steps using data on t-1, t-2, ..., 
+t-k is put on day t-1
+"""
+
 import numpy as np
 import pandas as pd
 from vecm_utils import VECM, VAR, select_order, select_coint_rank
@@ -39,6 +44,7 @@ class LinearPredictor(Predictor):
         """
         deterministic: str, "n", "ci", "co", "li", "lo"
         """
+        self.train_df_last_row = data.iloc[[-1], :].copy()
         train_df = data.reset_index(drop=True)
 
         # Choose the best lag order
@@ -72,7 +78,7 @@ class LinearPredictor(Predictor):
         else:
             self.model_type = "VAR"
             train_rtn_df = train_df.pct_change().dropna().reset_index(drop=True)
-            train_rtn_df.columns = [x + "_rtn" for x in pair_df.columns]
+            train_rtn_df.columns = [x + "_rtn" for x in data.columns]
             var = VAR(train_rtn_df)
             # VAR model chooses best lag order according to `ic` implicitly
             lag_order_info = var.select_order(maxlags=10)
@@ -85,62 +91,50 @@ class LinearPredictor(Predictor):
             self.k_ar = self.model_result.k_ar
             self.lag_order = self.k_ar
             self.last_observations = train_rtn_df.iloc[-self.k_ar:].values
-        
-        self.train_df_last_row = train_df.iloc[[-1], :].copy()
 
-    def predict(self, data: pd.DataFrame, save_path: Optional[str] = None) \
-        -> pd.DataFrame:
+    def predict(self, data: pd.DataFrame, steps: int) -> pd.Series:
         """
         Day by day forecast
         """
+        concat_df = pd.concat([self.train_df_last_row, data])
+        pred_len = concat_df.shape[0]
         if self.model_type == "VECM":
             pred_list = []
             nd = np.vstack([self.last_observations, data.values])
-            for i in range(data.shape[0]):
-                pred_i = self.model_result.predict(
-                    steps=1, last_observations=nd[i: i + self.k_ar]
+            for i in range(pred_len):
+                pred_during_steps = self.model_result.predict(
+                    steps=steps, last_observations=nd[i: i + self.k_ar]
                 )
-                pred_list.append(pred_i)
-            pred = np.vstack(pred_list)
+                pred_at_step = pred_during_steps[[-1], :]
+                pred_list.append(pred_at_step)
+            price_pred = np.vstack(pred_list)
 
         elif self.model_type == "VAR":
             rtn_pred_list = []
-            test_df = pd.concat([self.train_df_last_row, data], axis=0,
-                                ignore_index=True)
-            test_rtn_df = test_df.pct_change().dropna()
+            test_rtn_df = concat_df.pct_change().dropna()
             rtn_nd = np.vstack([self.last_observations, test_rtn_df.values])
-            for i in range(test_rtn_df.shape[0]):
-                rtn_pred_i = self.model_result.forecast(
-                    rtn_nd[i: i + self.k_ar], steps=1
+            for i in range(pred_len):
+                rtn_pred_during_steps = self.model_result.forecast(
+                    rtn_nd[i: i + self.k_ar], steps=steps
                 )
-                rtn_pred_list.append(rtn_pred_i)
+                rtn_pred_at_step = \
+                    (1 + rtn_pred_during_steps).prod(axis=0, keepdims=True) - 1
+                rtn_pred_list.append(rtn_pred_at_step)
             rtn_pred = np.vstack(rtn_pred_list)
-            pred = (1 + rtn_pred).cumprod(axis=0) * \
-                self.train_df_last_row.values
+            price_pred = (1 + rtn_pred) * concat_df.values
 
-        pred_df = pd.DataFrame(pred, index=data.index, columns=data.columns)
-        # Rearrange output format
+        # prediction using t-1, t-2, ..., t-k is put on day t-1
+        price_pred_df = pd.DataFrame(price_pred, index=concat_df.index, 
+                                     columns=concat_df.columns)
         # calculate predicted return spread
-        rtn_pred_df = pd.concat(
-            [self.train_df_last_row, pred_df]
-        ).pct_change().dropna()
+        rtn_pred_df = price_pred_df / concat_df - 1
         rtn_spread_pred_s = rtn_pred_df.iloc[:, 0] - rtn_pred_df.iloc[:, 1]
-        # calculate actual return spread
-        rtn_actual_df = pd.concat(
-            [self.train_df_last_row, data]
-        ).pct_change().dropna()
-        rtn_spread_actual_s = \
-            rtn_actual_df.iloc[:, 0] - rtn_actual_df.iloc[:, 1]
-        output_df = pd.concat([rtn_spread_pred_s, rtn_spread_actual_s], axis=1)
-        output_df.columns = ["pred_spread", "actual_spread"]
-        if save_path:
-            output_df.to_pickle(save_path)
-        return output_df
+        return rtn_spread_pred_s
 
-    def periodic_train_predict(self, data: pd.DataFrame, \
-        save_path: Optional[str] = None) -> pd.DataFrame:
-        split_year = 2017
-        output_dfs = []
+    def periodic_train_predict(self, data: pd.DataFrame, split_date: str, \
+        steps: int) -> pd.Series:
+        split_year = int(split_date.split("-")[0])
+        output_series_list = []
         while split_year <= data.index[-1].year:
             split_date = f"{split_year}-01-01"
             test_end_date = f"{split_year + 1}-01-01"
@@ -149,72 +143,87 @@ class LinearPredictor(Predictor):
                 (data.index >= split_date) & (data.index < test_end_date)
             ].copy()
             self.train(train_df)
-            output_df_i = self.predict(test_df)
-            output_dfs.append(output_df_i)
+            rtn_spread_pred_s = self.predict(test_df, steps)
+            output_series_list.append(rtn_spread_pred_s)
             split_year += 1
-        output_df = pd.concat(output_dfs)
-        if save_path:
-            output_df.to_pickle(save_path)
-        return output_df
+        output_series = pd.concat(output_series_list)
+        # `keep="first"`: for the last day in the training period, the 
+        # prediction comes from the old model, but not the new one. for
+        # example, at 2017-12-31, we update the model, but the prediction 
+        # on next day still comes from the old model
+        output_series = \
+            output_series[~output_series.index.duplicated(keep="first")]
+        return output_series
 
 if __name__ == "__main__":
-    freqs = ["d", "w", "M"]
+    split_date = "2018-01-01"
+    freq_mapping = dict(zip(["d", "w", "M"], [1, 5, 21]))
     modes = ["predict", "periodic_train_predict"]
     
     # Set Path
     data_path = "../data/"
-    save_path = f"../prediction/linear_model/"
+    save_path = f"../prediction/baseline/"
     for mode in modes:
         if not os.path.exists(f"{save_path}{mode}/"):
             os.makedirs(f"{save_path}{mode}/")
 
-    # Load Pairs
-    raw_price_df = pd.read_csv(data_path + "price_df.csv", parse_dates=["Date"])
+    # Load Data
+    raw_price_df = pd.read_csv(data_path + "Final Price Df.csv", 
+                               parse_dates=["Date"])
     raw_price_df.sort_values(["ETF_Ticker", "Date"], inplace=True)
-    feature_df = pd.read_csv(data_path + "TrainingSet.csv")
+    price_s = raw_price_df.set_index(["ETF_Ticker", "Date"]).squeeze()
+    feature_df = pd.read_csv(data_path + "Final TrainingSet.csv")
     pair_arr = np.unique(feature_df["Ticker_Pair"].values)
     
-    # Make predictions on each pair under 
-    for freq in tqdm(freqs):
-        if freq == "d":
-            price_s = raw_price_df.set_index(["ETF_Ticker", "Date"]).squeeze()
-        else:
-            price_s = raw_price_df.groupby("ETF_Ticker").apply(lambda df: 
-                df.set_index("Date")["ETF Price"].resample(freq).last())
+    # Make predictions on each pair under different modes and frequencies
+    for freq, steps in tqdm(freq_mapping.items()):
         for mode in tqdm(modes):
             output_list = []
-            for pair in pair_arr:
+            for pair in tqdm(pair_arr):
                 pair_list = pair.split("_")
                 pair_s = price_s.loc[pair_list, :].copy()
                 pair_df = pair_s.unstack("ETF_Ticker")
                 pair_df.dropna(inplace=True)
 
+                # Train test split
+                train_df = pair_df.loc[pair_df.index < split_date].copy()
+                test_df = pair_df.loc[pair_df.index >= split_date].copy()
+
                 # Build Predictor
                 predictor = LinearPredictor()
                 if mode == "predict":
-                    # train test split
-                    train_df = pair_df.loc[pair_df.index < "2017-01-01"].copy()
-                    test_df = pair_df.loc[pair_df.index >= "2017-01-01"].copy()
                     predictor.train(train_df)
-                    output_i_df = predictor.predict(
-                        test_df#, f"{save_path}{pair}_{freq}.pkl"
-                    )
+                    rtn_spread_pred_s = predictor.predict(test_df, steps)
                 elif mode == "periodic_train_predict":
-                    output_i_df = predictor.periodic_train_predict(
-                        pair_df#, f"{save_path}{pair}_{freq}.pkl"
+                    rtn_spread_pred_s = predictor.periodic_train_predict(
+                        pair_df, split_date, steps
                     )
-                # print(output_i_df.head())
-                # print()
-                # print(output_i_df.tail())
+
+                # calculate actual return spread
+                actual_rtn_spread_df = pd.concat(
+                    [train_df.iloc[[-1], :], test_df]
+                ).pct_change(steps).shift(-steps).dropna()
+                actual_rtn_spread_s = actual_rtn_spread_df.iloc[:, 0] - \
+                    actual_rtn_spread_df.iloc[:, 1]
+        
+                output_i_df = pd.concat(
+                    [rtn_spread_pred_s, actual_rtn_spread_s],
+                    axis=1,
+                    join="inner"
+                )
+                output_i_df.columns = ["pred_spread", "actual_spread"]
+
+                # Reformat
                 output_i_df.index.name = "Date"
                 output_i_df.reset_index(inplace=True)
                 output_i_df["pair"] = pair
                 output_i_df = output_i_df.reindex(
-                    ["pair"] + list(output_i_df.columns[:-1]), axis=1
+                    np.roll(output_i_df.columns.values, 1), axis=1
                 )
                 output_list.append(output_i_df)
                 
             output_df = pd.concat(output_list)
+            # print(output_df)
             output_df.to_pickle(
                 f"{save_path}{mode}/ReturnSpreadPredictions_{freq}.pkl"
             )
