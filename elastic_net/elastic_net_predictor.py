@@ -74,19 +74,22 @@ class ElasticNetPredictor(Predictor):
         return output_series
 
 if __name__ == "__main__":
-    split_date = "2018-01-01"
+    split_date = "2017-01-01"
     freq_mapping = dict(zip(["d", "w", "M"], [1, 5, 21]))
     modes = ["predict", "periodic_train_predict"]
     
     # Set Path
     data_path = "../data/"
-    save_path = f"../prediction/elastic_net/"
+    pred_path = f"../prediction/elastic_net/"
+    param_path = f"../parameter/elastic_net/"
     for mode in modes:
-        if not os.path.exists(f"{save_path}{mode}/"):
-            os.makedirs(f"{save_path}{mode}/")
+        if not os.path.exists(f"{pred_path}{mode}/"):
+            os.makedirs(f"{pred_path}{mode}/")
+        if not os.path.exists(f"{param_path}{mode}/"):
+            os.makedirs(f"{param_path}{mode}/")
 
     # Load Data
-    df = pd.read_csv(data_path + "Final TrainingSet.csv", 
+    df = pd.read_csv(data_path + "TrainingSet.csv", 
                      parse_dates=["Date"],
                      index_col=0)
     pair_arr = np.unique(df["Ticker_Pair"].values)
@@ -102,13 +105,15 @@ if __name__ == "__main__":
     
     # Make predictions on each pair under different modes and frequencies
     for freq, steps in tqdm(freq_mapping.items()):
+        target = f"{target_prefix}{steps}"
+        ar_features = [feature for feature in df.columns 
+                        if feature.startswith(f"Y_{steps}")]
+        features = common_features + ar_features
         for mode in tqdm(modes):
             output_list = []
+            best_hyperparameters = []
+            estimated_parameters = []
             for pair in tqdm(pair_arr):
-                target = f"{target_prefix}{steps}"
-                ar_features = [feature for feature in df.columns 
-                               if feature.startswith(f"Y_{steps}")]
-                features = common_features + ar_features
                 pair_df = df.loc[pair, features + [target]].dropna()
 
                 # Train test split
@@ -121,17 +126,37 @@ if __name__ == "__main__":
                 predictor = ElasticNetPredictor()
                 if mode == "predict":
                     predictor.train(X_train, y_train, param_grid)
-                    y_pred = predictor.predict(X_test)
+                    y_pred_out_of_sample = predictor.predict(X_test)
+                    # get best hyperparameters and trained parameters
+                    best_hyperparameters.append(predictor.best_params)
+                    estimated_parameters.append(predictor.model.coef_)
+                    # get in-sample prediction
+                    y_pred_in_sample = predictor.predict(X_train)
+
                 elif mode == "periodic_train_predict":
                     X = pair_df[features]
                     y = pair_df[target]
-                    y_pred = predictor.periodic_train_predict(
+                    y_pred_out_of_sample = predictor.periodic_train_predict(
                         X, y, split_date, param_grid
                     )
+                    # get best hyperparameters and trained parameters
+                    best_hyperparameters.append(predictor.best_params)
+                    estimated_parameters.append(predictor.model.coef_)
+                    # get in-sample prediction
+                    y_pred_in_sample = predictor.predict(X_train)
 
                 # get actual return spread from y_test
-                output_i_df = pd.concat([y_pred, y_test], axis=1)
-                output_i_df.columns = ["pred_spread", "actual_spread"]
+                test_output_i_df = pd.concat([y_pred_out_of_sample, y_test], 
+                                             axis=1)
+                test_output_i_df.columns = ["pred_spread", "actual_spread"]
+
+                # get in-sample prediction 
+                train_output_i_df = pd.concat([y_pred_in_sample, y_train],
+                                               axis=1)
+                train_output_i_df.columns = ["pred_spread", "actual_spread"]
+                
+                # aggregation
+                output_i_df = pd.concat([train_output_i_df, test_output_i_df])
 
                 # Reformat
                 output_i_df.index.name = "Date"
@@ -142,8 +167,21 @@ if __name__ == "__main__":
                 )
                 output_list.append(output_i_df)
                 
-            output_df = pd.concat(output_list)
+            # Prediction Output
+            output_df = pd.concat(output_list, ignore_index=True)
             # print(output_df)
             output_df.to_pickle(
-                f"{save_path}{mode}/ReturnSpreadPredictions_{freq}.pkl"
+                f"{pred_path}{mode}/ReturnSpreadPredictions_{freq}.pkl"
             )
+
+            # Parameter Output
+            best_hyperparameter_df = pd.DataFrame(best_hyperparameters)
+            best_hyperparameter_df.index = pair_arr
+            estimated_parmater_df = pd.DataFrame(
+                np.vstack(estimated_parameters),
+                index=pair_arr,
+                columns=features
+            )
+            parameter_df = pd.concat([best_hyperparameter_df, 
+                                     estimated_parmater_df], axis=1)
+            parameter_df.to_csv(f"{param_path}{mode}/parameters_{freq}.csv")

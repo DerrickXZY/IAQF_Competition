@@ -33,7 +33,7 @@ class Predictor():
         pass
 
 
-class LinearPredictor(Predictor):
+class BaselinePredictor(Predictor):
     """
     Build VECM / VAR
     """
@@ -92,44 +92,86 @@ class LinearPredictor(Predictor):
             self.lag_order = self.k_ar
             self.last_observations = train_rtn_df.iloc[-self.k_ar:].values
 
-    def predict(self, data: pd.DataFrame, steps: int) -> pd.Series:
+    def predict(self, data: pd.DataFrame, steps: int, in_sample: bool = False) \
+        -> pd.Series:
         """
         Day by day forecast
         """
-        concat_df = pd.concat([self.train_df_last_row, data])
-        pred_len = concat_df.shape[0]
-        if self.model_type == "VECM":
-            pred_list = []
-            nd = np.vstack([self.last_observations, data.values])
-            for i in range(pred_len):
-                pred_during_steps = self.model_result.predict(
-                    steps=steps, last_observations=nd[i: i + self.k_ar]
-                )
-                pred_at_step = pred_during_steps[[-1], :]
-                pred_list.append(pred_at_step)
-            price_pred = np.vstack(pred_list)
+        if in_sample:
+            # In-Sample Prediction
+            
+            if self.model_type == "VECM":
+                pred_list = []
+                nd = data.values
+                pred_len = data.shape[0] - self.k_ar + 1
+                for i in range(pred_len):
+                    pred_during_steps = self.model_result.predict(
+                        steps=steps, last_observations=nd[i: i + self.k_ar]
+                    )
+                    pred_at_step = pred_during_steps[[-1], :]
+                    pred_list.append(pred_at_step)
+                price_pred = np.vstack(pred_list)
 
-        elif self.model_type == "VAR":
-            rtn_pred_list = []
-            test_rtn_df = concat_df.pct_change().dropna()
-            rtn_nd = np.vstack([self.last_observations, test_rtn_df.values])
-            for i in range(pred_len):
-                rtn_pred_during_steps = self.model_result.forecast(
-                    rtn_nd[i: i + self.k_ar], steps=steps
-                )
-                rtn_pred_at_step = \
-                    (1 + rtn_pred_during_steps).prod(axis=0, keepdims=True) - 1
-                rtn_pred_list.append(rtn_pred_at_step)
-            rtn_pred = np.vstack(rtn_pred_list)
-            price_pred = (1 + rtn_pred) * concat_df.values
+            elif self.model_type == "VAR":
+                rtn_pred_list = []
+                train_rtn_df = data.pct_change().dropna()
+                rtn_nd = train_rtn_df.values
+                pred_len = train_rtn_df.shape[0] - self.k_ar + 1
+                for i in range(pred_len):
+                    rtn_pred_during_steps = self.model_result.forecast(
+                        rtn_nd[i: i + self.k_ar], steps=steps
+                    )
+                    rtn_pred_at_step = (1 + rtn_pred_during_steps).prod(axis=0, 
+                        keepdims=True) - 1
+                    rtn_pred_list.append(rtn_pred_at_step)
+                rtn_pred = np.vstack(rtn_pred_list)
+                price_pred = (1 + rtn_pred) * data.values[-pred_len:]
 
-        # prediction using t-1, t-2, ..., t-k is put on day t-1
-        price_pred_df = pd.DataFrame(price_pred, index=concat_df.index, 
-                                     columns=concat_df.columns)
-        # calculate predicted return spread
-        rtn_pred_df = price_pred_df / concat_df - 1
-        rtn_spread_pred_s = rtn_pred_df.iloc[:, 0] - rtn_pred_df.iloc[:, 1]
-        return rtn_spread_pred_s
+            # prediction using t-1, t-2, ..., t-k is put on day t-1
+            price_pred_df = pd.DataFrame(price_pred, 
+                                         index=train_df.index[-pred_len:], 
+                                         columns=train_df.columns)
+            # calculate predicted return spread
+            rtn_pred_df = price_pred_df / train_df.iloc[-pred_len:, :] - 1
+            rtn_spread_pred_s = rtn_pred_df.iloc[:, 0] - rtn_pred_df.iloc[:, 1]
+            return rtn_spread_pred_s
+
+        else:
+            # Out-Of-Sample Prediction
+            concat_df = pd.concat([self.train_df_last_row, data])
+            pred_len = concat_df.shape[0]
+            if self.model_type == "VECM":
+                pred_list = []
+                nd = np.vstack([self.last_observations, data.values])
+                for i in range(pred_len):
+                    pred_during_steps = self.model_result.predict(
+                        steps=steps, last_observations=nd[i: i + self.k_ar]
+                    )
+                    pred_at_step = pred_during_steps[[-1], :]
+                    pred_list.append(pred_at_step)
+                price_pred = np.vstack(pred_list)
+
+            elif self.model_type == "VAR":
+                rtn_pred_list = []
+                test_rtn_df = concat_df.pct_change().dropna()
+                rtn_nd = np.vstack([self.last_observations, test_rtn_df.values])
+                for i in range(pred_len):
+                    rtn_pred_during_steps = self.model_result.forecast(
+                        rtn_nd[i: i + self.k_ar], steps=steps
+                    )
+                    rtn_pred_at_step = \
+                        (1 + rtn_pred_during_steps).prod(axis=0, keepdims=True) - 1
+                    rtn_pred_list.append(rtn_pred_at_step)
+                rtn_pred = np.vstack(rtn_pred_list)
+                price_pred = (1 + rtn_pred) * concat_df.values
+
+            # prediction using t-1, t-2, ..., t-k is put on day t-1
+            price_pred_df = pd.DataFrame(price_pred, index=concat_df.index, 
+                                        columns=concat_df.columns)
+            # calculate predicted return spread
+            rtn_pred_df = price_pred_df / concat_df - 1
+            rtn_spread_pred_s = rtn_pred_df.iloc[:, 0] - rtn_pred_df.iloc[:, 1]
+            return rtn_spread_pred_s
 
     def periodic_train_predict(self, data: pd.DataFrame, split_date: str, \
         steps: int) -> pd.Series:
@@ -156,29 +198,33 @@ class LinearPredictor(Predictor):
         return output_series
 
 if __name__ == "__main__":
-    split_date = "2018-01-01"
+    split_date = "2017-01-01"
     freq_mapping = dict(zip(["d", "w", "M"], [1, 5, 21]))
     modes = ["predict", "periodic_train_predict"]
     
     # Set Path
     data_path = "../data/"
-    save_path = f"../prediction/baseline/"
+    pred_path = f"../prediction/baseline/"
+    param_path = f"../parameter/baseline/"
     for mode in modes:
-        if not os.path.exists(f"{save_path}{mode}/"):
-            os.makedirs(f"{save_path}{mode}/")
+        if not os.path.exists(f"{pred_path}{mode}/"):
+            os.makedirs(f"{pred_path}{mode}/")
+        if not os.path.exists(f"{param_path}{mode}/"):
+            os.makedirs(f"{param_path}{mode}/")
 
     # Load Data
-    raw_price_df = pd.read_csv(data_path + "Final Price Df.csv", 
+    raw_price_df = pd.read_csv(data_path + "price_df.csv", 
                                parse_dates=["Date"])
     raw_price_df.sort_values(["ETF_Ticker", "Date"], inplace=True)
     price_s = raw_price_df.set_index(["ETF_Ticker", "Date"]).squeeze()
-    feature_df = pd.read_csv(data_path + "Final TrainingSet.csv")
+    feature_df = pd.read_csv(data_path + "TrainingSet.csv")
     pair_arr = np.unique(feature_df["Ticker_Pair"].values)
     
     # Make predictions on each pair under different modes and frequencies
     for freq, steps in tqdm(freq_mapping.items()):
         for mode in tqdm(modes):
             output_list = []
+            estimated_parameters = []
             for pair in tqdm(pair_arr):
                 pair_list = pair.split("_")
                 pair_s = price_s.loc[pair_list, :].copy()
@@ -190,24 +236,75 @@ if __name__ == "__main__":
                 test_df = pair_df.loc[pair_df.index >= split_date].copy()
 
                 # Build Predictor
-                predictor = LinearPredictor()
+                predictor = BaselinePredictor()
                 if mode == "predict":
                     predictor.train(train_df)
-                    rtn_spread_pred_s = predictor.predict(test_df, steps)
+                    rtn_spread_pred_out_of_sample_s = \
+                        predictor.predict(test_df, steps)
+                    # get in-sample prediction
+                    rtn_spread_pred_in_sample_s = \
+                        predictor.predict(train_df, steps, True)
+
                 elif mode == "periodic_train_predict":
-                    rtn_spread_pred_s = predictor.periodic_train_predict(
-                        pair_df, split_date, steps
-                    )
+                    rtn_spread_pred_out_of_sample_s = \
+                        predictor.periodic_train_predict(
+                            pair_df, split_date, steps
+                        )
+                    # get in-sample prediction
+                    rtn_spread_pred_in_sample_s = \
+                        predictor.predict(train_df, steps, True)
+                    
+                # get estimated parameters
+                parameter_dict = {"model_type": predictor.model_type}
+                result = predictor.model_result
+                if predictor.model_type == "VECM":
+                    # see parameter explanations:
+                    # https://www.statsmodels.org/dev/generated/statsmodels.
+                    # tsa.vector_ar.vecm.VECMResults.html
+                    # model representation:
+                    # https://www.statsmodels.org/dev/generated/statsmodels.
+                    # tsa.vector_ar.vecm.VECM.html
+                    parameter_dict["coint_rank"] = result.coint_rank
+                    # k_ar: number of lags in the VAR representation
+                    # k_ar_diff: number of lags in VECM
+                    parameter_dict["k_ar_diff"] = result.k_ar - 1
+                    # alpha: coefficients of error correction terms(s)
+                    parameter_dict["alpha"] = result.alpha
+                    # beta: coefficients to build error correction term(s)
+                    parameter_dict["beta"] = result.beta
+                    # gamma: coefficients of lag terms
+                    parameter_dict["gamma"] = result.gamma
+                    # det_coef: coefficients of deterministic terms,
+                    # i.e. constant and trend term here
+                    parameter_dict["det_coef"] = result.det_coef
+                elif predictor.model_type == "VAR":
+                    # see parameter explanations:
+                    # https://www.statsmodels.org/dev/generated/statsmodels.
+                    # tsa.vector_ar.var_model.VARResults.html
+                    # k_ar: number of lags
+                    parameter_dict["k_ar"] = result.k_ar
+                    # params: all parameters
+                    parameter_dict["params"] = result.params
+
+                estimated_parameters.append(parameter_dict)
+
+                # aggregate in-sample and out-of-sample prediction
+                rtn_spread_pred_s = pd.concat([
+                    rtn_spread_pred_in_sample_s.iloc[:-1], 
+                    rtn_spread_pred_out_of_sample_s
+                ])
 
                 # calculate actual return spread
-                actual_rtn_spread_df = pd.concat(
-                    [train_df.iloc[[-1], :], test_df]
-                ).pct_change(steps).shift(-steps).dropna()
-                actual_rtn_spread_s = actual_rtn_spread_df.iloc[:, 0] - \
-                    actual_rtn_spread_df.iloc[:, 1]
+                # rtn_spread_actual_out_of_sample_df = pd.concat(
+                #     [train_df.iloc[[-1], :], test_df]
+                # ).pct_change(steps).shift(-steps).dropna()
+                rtn_spread_actual_df = \
+                    pair_df.pct_change(steps).shift(-steps).dropna()
+                rtn_spread_actual_s = rtn_spread_actual_df.iloc[:, 0] - \
+                    rtn_spread_actual_df.iloc[:, 1]
         
                 output_i_df = pd.concat(
-                    [rtn_spread_pred_s, actual_rtn_spread_s],
+                    [rtn_spread_pred_s, rtn_spread_actual_s],
                     axis=1,
                     join="inner"
                 )
@@ -222,8 +319,11 @@ if __name__ == "__main__":
                 )
                 output_list.append(output_i_df)
                 
-            output_df = pd.concat(output_list)
+            output_df = pd.concat(output_list, ignore_index=True)
             # print(output_df)
             output_df.to_pickle(
-                f"{save_path}{mode}/ReturnSpreadPredictions_{freq}.pkl"
+                f"{pred_path}{mode}/ReturnSpreadPredictions_{freq}.pkl"
             )
+
+            parameter_df = pd.DataFrame(estimated_parameters, index=pair_arr)
+            parameter_df.to_csv(f"{param_path}{mode}/parameters_{freq}.csv")
