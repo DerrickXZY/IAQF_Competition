@@ -1,0 +1,2 @@
+# Parameters for Elastic Net
+The first two columns are hyperparameters `alpha` and `l1_ratio`, which represent penalty weight and L1 regularization ratio respectively. The remaining columns are parameters of all features that can be used under specified frequency. So please note that **AR features are different under different frequencies**.
