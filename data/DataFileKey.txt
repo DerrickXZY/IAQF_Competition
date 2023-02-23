@@ -1,0 +1,60 @@
+The final datafile contains the following columns:
+
+##Valuations##
+1. Div Yield: Ratio of the current dividend yield of Ticker A / Ticker B
+2. Price to Book: Ratio of current P/B of Ticker A / Ticker B
+3. Price to Earnings: Ratio of current P/E of Ticker A/ Ticker B
+
+##Trailing Momentum##
+4. Total_Ret_Pct_1: Ticker A - ticker B trailing 1 business day % trailing total return 
+5. Total_Ret_Pct_5: Ticker A - ticker B trailing 5 business day % trailing total return 
+6. Total_Ret_Pct_21: Ticker A - ticker B trailing 21 business day % trailing total return 
+7. Total_Ret_Pct_252: Ticker A - ticker B trailing 252 business day % trailing total return
+
+##Y Forecast Variables##
+8. Y_Fwd_Total_Ret_Pct_1: Ticker A - Ticker B 1 business day forward % total return
+9. Y_Fwd_Total_Ret_Pct_5: Ticker A - Ticker B 5 business day forward % total return
+10. Y_Fwd_Total_Ret_Pct_21: Ticker A - Ticker B 21 business day forward % total return
+
+## Lagged Y Forecast Variables (OK to Use as Features for Potential AR Relationships) ##
+#AR Variables for 1D target
+11. Y_1Fwd_Lagged_1: Y_Fwd_Total_Ret_Pct_1, lagged 1 day
+12. Y_1Fwd_Lagged_1: Y_Fwd_Total_Ret_Pct_1, lagged 2 days
+13. Y_1Fwd_Lagged_1: Y_Fwd_Total_Ret_Pct_1, lagged 3 days
+14. Y_1Fwd_Lagged_1: Y_Fwd_Total_Ret_Pct_1, lagged 4 days
+15. Y_1Fwd_Lagged_1: Y_Fwd_Total_Ret_Pct_1, lagged 5 days
+
+#AR Variables for 5D target
+16. Y_5Fwd_Lagged_6: Y_Fwd_Total_Ret_Pct_5, lagged 6 days
+17. Y_5Fwd_Lagged_7: Y_Fwd_Total_Ret_Pct_5, lagged 7 days
+18. Y_5Fwd_Lagged_8: Y_Fwd_Total_Ret_Pct_5, lagged 8 days
+19. Y_5Fwd_Lagged_9: Y_Fwd_Total_Ret_Pct_5, lagged 9 days
+20. Y_5Fwd_Lagged_10: Y_Fwd_Total_Ret_Pct_5, lagged 10 days
+
+#AR Variables for 21D target
+21. Y_21Fwd_Lagged_21: Y_Fwd_Total_Ret_Pct_21, lagged 21 days
+22. Y_21Fwd_Lagged_42: Y_Fwd_Total_Ret_Pct_21, lagged 42 days
+23. Y_5Fwd_Lagged_63: Y_Fwd_Total_Ret_Pct_21, lagged 63 days
+24. Y_5Fwd_Lagged_252: Y_Fwd_Total_Ret_Pct_21, lagged 252 days
+
+#Technicals#
+All technicals take the price levels of the two pairs form a ratio and 
+then measure technical features to analyze overbought/oversold conditons.
+25. Fast_MACD: ta.trend.MACD, window_fast = 10, window_slow = 21
+26. Med_MACD: ta.trend.MACD, window_fast = 21, window_slow = 63
+27. Slow_MACD: ta.trend.MACD, window_fast = 63, window_slow = 252
+28. Pair_RSI_10: ta.momentum.rsi, window = 10
+29. Pair_RSI_21: ta.momentum.rsi, window = 21
+30. Pair_RSI_63: ta.momentum.rsi, window = 63
+31. Bollinger_10: ta.volatility.bollinger_pband(window = 10, window_dev =2)
+32. Bollinger_21: ta.volatility.bollinger_pband(window = 21, window_dev =2)
+33. Bollinger_63: ta.volatility.bollinger_pband(window = 63, window_dev =2)
+
+#Information Since the Last Cross#
+34. zero_cross:
+35. days_s_cross:
+
+#State Variables Provided by Professor KC ##
+Will fill in descriptions later. These are unique by time and not ticker and 
+are designed to speak to the macro climate during the period.
+
