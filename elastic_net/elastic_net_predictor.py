@@ -18,6 +18,7 @@ from tqdm import tqdm
 
 from sklearn.linear_model import ElasticNet
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
+from sklearn.preprocessing import StandardScaler
 
 
 # TODO: Change to import Predictor
@@ -47,12 +48,20 @@ class ElasticNetPredictor(Predictor):
         elastic_net = ElasticNet()
         tss = TimeSeriesSplit(n_splits=5)
         cv = GridSearchCV(elastic_net, param_grid, cv=tss, n_jobs=-1)
+        scaler = StandardScaler()
+        X_train_values = scaler.fit_transform(X_train.values)
+        X_train = pd.DataFrame(X_train_values, index=X_train.index, 
+                               columns=X_train.columns)
         cv.fit(X_train, y_train)
+        self.scaler = scaler
         self.model = cv.best_estimator_
         self.cv_best_score = cv.best_score_
         self.best_params = cv.best_params_
 
     def predict(self, X_test: pd.DataFrame) -> pd.Series:
+        X_test_values = self.scaler.transform(X_test.values)
+        X_test = pd.DataFrame(X_test_values, index=X_test.index,
+                              columns=X_test.columns)
         y_pred = self.model.predict(X_test)
         return pd.Series(y_pred, index=X_test.index)
 
@@ -99,8 +108,8 @@ if __name__ == "__main__":
                        if not feature.startswith("Y_")]
     target_prefix = "Y_Fwd_Total_Ret_Pct_"
     param_grid = {
-        "alpha": [0.1, 1.0, 10.0],
-        "l1_ratio": [0.1, 0.3, 0.5, 0.7, 0.9],
+        "alpha": [1e-2, 0.1, 1.0, 10.0],
+        "l1_ratio": [1e-3, 1e-2, 0.1, 0.3, 0.5, 0.7, 0.9],
     }
     
     # Make predictions on each pair under different modes and frequencies
