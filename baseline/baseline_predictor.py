@@ -159,8 +159,8 @@ class BaselinePredictor(Predictor):
                     rtn_pred_during_steps = self.model_result.forecast(
                         rtn_nd[i: i + self.k_ar], steps=steps
                     )
-                    rtn_pred_at_step = \
-                        (1 + rtn_pred_during_steps).prod(axis=0, keepdims=True) - 1
+                    rtn_pred_at_step = (1 + rtn_pred_during_steps).prod(axis=0, 
+                        keepdims=True) - 1
                     rtn_pred_list.append(rtn_pred_at_step)
                 rtn_pred = np.vstack(rtn_pred_list)
                 price_pred = (1 + rtn_pred) * concat_df.values
