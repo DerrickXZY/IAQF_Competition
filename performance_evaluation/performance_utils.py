@@ -127,6 +127,7 @@ def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
         low_mark_cols: list, indices/funds you want to add low annotation
         labels: list, lables in legend
     """
+    _ = plt.figure()
     plt.plot(NAV_df)
     plt.xticks(rotation=30)
     plt.xlabel("Time")
