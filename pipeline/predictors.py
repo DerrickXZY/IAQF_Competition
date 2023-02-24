@@ -161,16 +161,14 @@ class LSTMPredictor(Predictor):
             }
         pred_period = params['pred_period']
         if pred_period == 'D':
-            with open('IAQF_Competition/prediction/lstm/predict/ReturnSpreadPredictions_d.pkl', 'rb') as f:
+            with open('../prediction/lstm/predict/ReturnSpreadPredictions_d.pkl', 'rb') as f:
                 return pickle.load(f)
         if pred_period == 'M':
-            with open('IAQF_Competition/prediction/lstm/predict/ReturnSpreadPredictions_M.pkl', 'rb') as f:
+            with open('../prediction/lstm/predict/ReturnSpreadPredictions_M.pkl', 'rb') as f:
                 return pickle.load(f)
         if pred_period == 'W':
-            with open('IAQF_Competition/prediction/lstm/predict/ReturnSpreadPredictions_w.pkl', 'rb') as f:
-                lstm_pred_df = pickle.load(f)
-                lstm_pred_df.columns = lstm_pred_df.columns.map(lambda x: x[0])
-                return lstm_pred_df
+            with open('../prediction/lstm/predict/ReturnSpreadPredictions_w.pkl', 'rb') as f:
+                return pickle.load(f)
 
     def periodic_train_predict(self, data: Optional[pd.DataFrame] = None, params: Optional[Mapping] = None) -> pd.DataFrame:
         return self.predict(data, params)

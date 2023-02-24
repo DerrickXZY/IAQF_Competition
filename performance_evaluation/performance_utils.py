@@ -7,7 +7,7 @@ def performance_for_series(rtn_s, rf=0.0):
     """
     Output:
         NAV_s: pd.Series, Net Asset Value (NAV) Series
-        Simple Return, Annualized Return, Annualized Volatility, Sharpe Ratio, 
+        Simple Return, Annualized Return, Annualized Volatility, Sharpe Ratio,
         Adjusted Sharpe Ratio, Sortino Ratio, Maximum Drawdown, Calmar Ratio
     """
     Rtn_s = rtn_s + 1
@@ -19,18 +19,18 @@ def performance_for_series(rtn_s, rf=0.0):
 
     # Annualized Return
     annualized_rtn = (1 + rtn) ** (252 / trading_len) - 1
-    
+
     # Annualized Volatility
     annualized_vol = rtn_s.std() * np.sqrt(252)
-    
+
     # Sharpe Ratio
     sharpe = (annualized_rtn - rf) / annualized_vol
 
     # Adjusted Sharpe Ratio
     skewness = rtn_s.skew()
     kurtosis = rtn_s.kurt()
-    adj_sharpe = sharpe * (1 + (skewness / 6) * sharpe 
-        - (kurtosis - 3) / 24 * (sharpe ** 2))
+    adj_sharpe = sharpe * (1 + (skewness / 6) * sharpe
+                           - (kurtosis - 3) / 24 * (sharpe ** 2))
 
     # Sortino Ratio
     down_rtn_s = rtn_s[rtn_s < rf]
@@ -57,11 +57,11 @@ def performance_for_series(rtn_s, rf=0.0):
     calmar = annualized_rtn / max_drawdown
 
     result_s = pd.Series(
-        [rtn, annualized_rtn, annualized_vol, sharpe, adj_sharpe, sortino, 
-        max_drawdown, calmar],                
-        index=["Simple Return", "Annualized Return", "Annualized Volatility", 
-        "Sharpe Ratio", "Adjusted Sharpe Ratio", "Sortino Ratio", 
-        "Maximum Drawdown", "Calmar Ratio"],
+        [rtn, annualized_rtn, annualized_vol, sharpe, adj_sharpe, sortino,
+         max_drawdown, calmar],
+        index=["Simple Return", "Annualized Return", "Annualized Volatility",
+               "Sharpe Ratio", "Adjusted Sharpe Ratio", "Sortino Ratio",
+               "Maximum Drawdown", "Calmar Ratio"],
         name=rtn_s.name
     )
     return NAV_s, result_s
@@ -82,10 +82,10 @@ def performance_for_df(rtn_df, rf=0.0):
 def judge_overlap(x_y, Range_y, len_x, T_y, T_x):
     """
     Input:
-        x_y: pd.Series, index is x, value is y, x and y are both numerics and 
+        x_y: pd.Series, index is x, value is y, x and y are both numerics and
             stand for x-coordinate and y-coordinate, x_y has been sorted by y
     Output:
-        If there exists an overlap, return the index of the first item needed 
+        If there exists an overlap, return the index of the first item needed
         to fix; otherwise, return None
     """
     y_diff_ratio = np.diff(x_y.values) / Range_y
@@ -96,14 +96,14 @@ def judge_overlap(x_y, Range_y, len_x, T_y, T_x):
         overlap = overlap_y & overlap_x
         if overlap.any():
             idx = overlap.tolist().index(True)
-            return idx + 1 # as np.diff drops the first np.nan, so add 1
+            return idx + 1  # as np.diff drops the first np.nan, so add 1
     return None
 
 
 def adjust_overlap(x_y, adjust_idx, adj_unit):
     """
     Input:
-        x_y: pd.Series, index is x, value is y, x and y are both numerics and 
+        x_y: pd.Series, index is x, value is y, x and y are both numerics and
             stand for x-coordinate and y-coordinate, x_y has been sorted by y
         adjust_idx: int(>=1), index of x_y needed to adjust
         adj_unit: float, correction magnitude of y
@@ -127,19 +127,20 @@ def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
     plt.xticks(rotation=30)
     plt.xlabel("Time")
     plt.ylabel("NAV")
-    range_nav = NAV_df.values.max() - NAV_df.values.min() # range of NAV
+    plt.yscale('log')
+    range_nav = NAV_df.values.max() - NAV_df.values.min()  # range of NAV
     len_t = NAV_df.shape[0]
-    for mark_cols,fun,argfun,label,color in zip([high_mark_cols,low_mark_cols],
-                                                [np.max,np.min],
-                                                [np.argmax,np.argmin],
-                                                ["High","Low"],
-                                                ["green","red"]):
+    for mark_cols, fun, argfun, label, color in zip([high_mark_cols, low_mark_cols],
+                                                    [np.max, np.min],
+                                                    [np.argmax, np.argmin],
+                                                    ["High", "Low"],
+                                                    ["green", "red"]):
         if mark_cols:
             y_s = NAV_df[mark_cols].apply(fun)
             x_s = NAV_df[mark_cols].apply(argfun)
             # xynav is the coordinate of high/low
             xynav = pd.Series(y_s.values, index=x_s.values)
-            # prevent a situation that reversed xytext cannot match xynav 
+            # prevent a situation that reversed xytext cannot match xynav
             # according to index when high and low of different series occur
             # at the same time
             real_index = xynav.index
@@ -149,10 +150,12 @@ def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
             # judge whether it would be too close for two text coordiates.
             # if so, fix it
             xytext.sort_values(ascending=False, inplace=True)
-            adj_idx = judge_overlap(xytext, range_nav, len_t, T_y=0.04, T_x=0.15)
+            adj_idx = judge_overlap(
+                xytext, range_nav, len_t, T_y=0.04, T_x=0.15)
             while (adj_idx is not None):
                 xytext = adjust_overlap(xytext, adj_idx, -0.07*range_nav)
-                adj_idx = judge_overlap(xytext, range_nav, len_t, T_y=0.04, T_x=0.15)
+                adj_idx = judge_overlap(
+                    xytext, range_nav, len_t, T_y=0.04, T_x=0.15)
             # annotate high/low
             xy_nav_text = pd.concat([xynav, xytext], axis=1)
             xy_nav_text.index = real_index
@@ -164,25 +167,25 @@ def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
                 xy = (t, y_nav)
                 xytext = (t, y_text)
                 plt.annotate(label+":%.3f" % y_nav, xy=xy, xytext=xytext,
-                            arrowprops={
-                                "facecolor":color,
-                                # arrow breadth (unit: dot)
-                                "width": 0, 
-                                # arrowhead breadth (unit: dot)
-                                "headwidth": 5, 
-                                # arrowhead length (unit: dot)
-                                "headlength": 5, 
-                                # arrowhead side shrinkage percentage 
-                                # (of total length)
-                                # "shrink": 0.5, 
-                            })
+                             arrowprops={
+                                 "facecolor": color,
+                                 # arrow breadth (unit: dot)
+                                 "width": 0,
+                                 # arrowhead breadth (unit: dot)
+                                 "headwidth": 5,
+                                 # arrowhead length (unit: dot)
+                                 "headlength": 5,
+                                 # arrowhead side shrinkage percentage
+                                 # (of total length)
+                                 # "shrink": 0.5,
+                             })
     if labels:
         plt.legend(labels=labels)
     plt.grid(grid)
     if fig_path:
         plt.savefig(fig_path, bbox_inches="tight", dpi=480)
     # plt.show()
-    
+
 
 def NAV_s_plot(NAV_s, high_mark=True, low_mark=True, grid=True, fig_path=None):
     NAV_s.plot.line()
@@ -196,7 +199,7 @@ def NAV_s_plot(NAV_s, high_mark=True, low_mark=True, grid=True, fig_path=None):
         max_xy = (t_maxNAV, maxNAV)
         max_xytext = max_xy
         plt.annotate("High: %.3f" % maxNAV, xy=max_xy, xytext=max_xytext,
-                      arrowprops={"facecolor":"green","shrink":0,"width":0})
+                     arrowprops={"facecolor": "green", "shrink": 0, "width": 0})
     if low_mark:
         minNAV = NAV_s.min()
         t_minNAV = NAV_s.index[NAV_s.argmin()]
@@ -204,11 +207,10 @@ def NAV_s_plot(NAV_s, high_mark=True, low_mark=True, grid=True, fig_path=None):
         min_xy = (t_minNAV, minNAV)
         min_xytext = min_xy
         plt.annotate("Low: %.3f" % minNAV, xy=min_xy, xytext=min_xytext,
-                      arrowprops={"facecolor":"red","shrink":0,"width":0})
+                     arrowprops={"facecolor": "red", "shrink": 0, "width": 0})
     plt.grid(grid)
     if fig_path:
         plt.savefig(fig_path, bbox_inches="tight", dpi=480)
-        
 
 
 if __name__ == "__main__":
@@ -221,9 +223,9 @@ if __name__ == "__main__":
 
     spy = yf.download("SPY", start=start_date, end=end_date)
     r2k = yf.download("IWM", start=start_date, end=end_date)
-    rtn_df = pd.concat([spy["Adj Close"].pct_change().dropna(), 
+    rtn_df = pd.concat([spy["Adj Close"].pct_change().dropna(),
                         r2k["Adj Close"].pct_change().dropna()],
-                        axis=1, join="inner")
+                       axis=1, join="inner")
     rtn_df.columns = ["SPY", "R2K"]
     nav_df, result_df = performance_for_df(rtn_df, rf=0.0)
     print(result_df)
