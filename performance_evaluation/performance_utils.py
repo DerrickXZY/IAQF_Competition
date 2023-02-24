@@ -54,14 +54,18 @@ def performance_for_series(rtn_s, rf=0.0):
     # max_drawdown_s = pd.Series(max_drawdown_l, index=rtn_s.index)
 
     # Calmar Ratio
-    calmar = annualized_rtn / max_drawdown
+    try:
+        calmar = annualized_rtn / max_drawdown
+    except ZeroDivisionError:
+        calmar = np.inf if annualized_rtn > 0 else -np.inf
 
     result_s = pd.Series(
-        [rtn, annualized_rtn, annualized_vol, sharpe, adj_sharpe, sortino, 
-        max_drawdown, calmar],                
-        index=["Simple Return", "Annualized Return", "Annualized Volatility", 
-        "Sharpe Ratio", "Adjusted Sharpe Ratio", "Sortino Ratio", 
-        "Maximum Drawdown", "Calmar Ratio"],
+        [rtn * 100, annualized_rtn * 100, annualized_vol * 100, sharpe, 
+         adj_sharpe, sortino, max_drawdown * 100, calmar],                
+        index=["Simple Return (%)", "Annualized Return (%)", 
+               "Annualized Volatility (%)", "Sharpe Ratio", 
+               "Adjusted Sharpe Ratio", "Sortino Ratio", 
+               "Maximum Drawdown (%)", "Calmar Ratio"],
         name=rtn_s.name
     )
     return NAV_s, result_s
@@ -71,7 +75,7 @@ def performance_for_df(rtn_df, rf=0.0):
     NAV_l = []
     result_l = []
     for j in range(rtn_df.shape[1]):
-        NAV_s, result_s = performance_for_series(rtn_df.iloc[:, j], rf)
+        NAV_s, result_s = performance_for_series(rtn_df.iloc[:, j].dropna(), rf)
         NAV_l.append(NAV_s)
         result_l.append(result_s)
     NAV_df = pd.concat(NAV_l, axis=1)
@@ -116,7 +120,7 @@ def adjust_overlap(x_y, adjust_idx, adj_unit):
 
 
 def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
-                grid=True, fig_path=None):
+                grid=True, fig_path=None, ylabel="NAV"):
     """
     Input:
         high_mark_cols: list, indices/funds you want to add high annotation
@@ -126,7 +130,7 @@ def NAV_df_plot(NAV_df, high_mark_cols, low_mark_cols, labels=[],
     plt.plot(NAV_df)
     plt.xticks(rotation=30)
     plt.xlabel("Time")
-    plt.ylabel("NAV")
+    plt.ylabel(ylabel)
     range_nav = NAV_df.values.max() - NAV_df.values.min() # range of NAV
     len_t = NAV_df.shape[0]
     for mark_cols,fun,argfun,label,color in zip([high_mark_cols,low_mark_cols],
