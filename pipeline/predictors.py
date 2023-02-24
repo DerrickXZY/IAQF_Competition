@@ -2,6 +2,7 @@ from typing import List, Tuple, Optional, Mapping
 import pickle
 import pandas as pd
 
+
 class Predictor():
     def __init__(self):
         pass
@@ -159,14 +160,14 @@ class LSTMPredictor(Predictor):
                 'pred_period': 'D'
             }
         pred_period = params['pred_period']
-        # if pred_period == 'D':
-        #     with open('../prediction/lstm/predict/ReturnSpreadPredictions_d.pkl', 'rb') as f:
-        #         return pickle.load(f)
-        # if pred_period == 'M':
-        #     with open('../prediction/lstm/predict/ReturnSpreadPredictions_w.pkl', 'rb') as f:
-        #         return pickle.load(f)
+        if pred_period == 'D':
+            with open('IAQF_Competition/prediction/lstm/predict/ReturnSpreadPredictions_d.pkl', 'rb') as f:
+                return pickle.load(f)
+        if pred_period == 'M':
+            with open('IAQF_Competition/prediction/lstm/predict/ReturnSpreadPredictions_M.pkl', 'rb') as f:
+                return pickle.load(f)
         if pred_period == 'W':
-            with open('../prediction/lstm/predict/ReturnSpreadPredictions_w.pkl', 'rb') as f:
+            with open('IAQF_Competition/prediction/lstm/predict/ReturnSpreadPredictions_w.pkl', 'rb') as f:
                 lstm_pred_df = pickle.load(f)
                 lstm_pred_df.columns = lstm_pred_df.columns.map(lambda x: x[0])
                 return lstm_pred_df
